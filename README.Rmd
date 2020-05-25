@@ -1,9 +1,15 @@
-User Analysis on Auspol
-================
+---
+title: "User Analysis on Auspol"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
 ## Tools
 
-``` r
+```{r}
 library(evently)
 library(reticulate)
 birdspotter <- import('birdspotter')
@@ -15,11 +21,11 @@ birdspotter <- import('birdspotter')
 
 ## Extracting diffusion cascades
 
-``` r
+```{r eval=FALSE}
 cascades <- parse_raw_tweets_to_cascades('auspol.jsonl', keep_user = T)
 ```
 
-``` r
+```{r eval=FALSE}
 bs <- birdspotter$BirdSpotter('auspol.jsonl')
 labeledUsers <- bs$getLabeledUsers(out = './output.csv')
 ```
