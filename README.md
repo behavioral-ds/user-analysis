@@ -11,7 +11,16 @@ birdspotter <- import('birdspotter')
 
 ## Dataset
 
-> TODO: what is auspol about
+The `auspol` dataset contains 9534 tweets curated by querying the
+Twitter steaming API for tweet containing the hashtag `#auspol` (short
+for Australian politics) during ????. Due to the terms of service of
+Twitter, we only publish the tweet IDs of these tweets. One can recover
+the complete dataset in JSONL via a tool named
+[twarc](https://github.com/DocNow/twarc) by the following bash command
+
+``` bash
+twarc hydrate auspol-ids.txt > tweets.jsonl
+```
 
 ## Extracting diffusion cascades
 
