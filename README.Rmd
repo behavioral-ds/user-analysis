@@ -33,15 +33,17 @@ bs <- birdspotter$BirdSpotter('auspol.jsonl')
 ```
 There are 3333 cascades in total from the dataset. We then apply functions to model these cascades before conducting analysis
 ```{r eval=FALSE}
+# we group cascades by the users who posted the tweet
+names(cascades) <- sapply(cascades, function(data) data$user[[1]])
 # fit Hawkes processes with power-law kernel functions on the cascades
 group_fits <- group_fit_series(cascades, model_type = 'mPL', observation_times = Inf, cores = 15)
 # getLabeledUsers() returns a pandas dataframe with the influence and botness labels of users 
 labeledUsers <- bs$getLabeledUsers()
 ```
+In `evently`, we group cascades posted by the same Twitter user together. We assume models built on the groups of cascades characterize the temporal dynamics of a user's influence to others.
 
 ## User influence analysis
-
-> TODO
+We use the parameters of `group_fits` from `evently` to quantify a user.
 
 ## User botness prediction
 
