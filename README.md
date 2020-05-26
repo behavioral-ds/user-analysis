@@ -31,20 +31,28 @@ twarc hydrate auspol-ids.txt > auspol.jsonl
 
 We note that 7077 tweets are available on Twitter as of 26/05/2020.
 
-## Extracting diffusion cascades
+## Preprocessing tweets
 
 At this step, we seek to extract diffusion cascades from the `auspol`
 dataset for analyzing user influence and botness. A diffusion cascade
-consist of a initial tweet posted by a Twitter user and followed then by
-a sereis of retweets. The
+consist of an initial tweet posted by a Twitter user and followed then
+by a sereis of retweets. A function provided by `evently` allows one to
+obtain cascades from JSON formatted raw tweets. On the other hand, we
+initialize a `BirdSpotter` instance by feeding the same raw tweet file.
 
 ``` r
 cascades <- parse_raw_tweets_to_cascades('auspol.jsonl', keep_user = T)
+bs <- birdspotter$BirdSpotter('auspol.jsonl')
 ```
 
+There are 3333 cascades in total from the dataset. We then apply
+functions to model these cascades before conducting analysis
+
 ``` r
-bs <- birdspotter$BirdSpotter('auspol.jsonl')
-labeledUsers <- bs$getLabeledUsers(out = './output.csv')
+# fit Hawkes processes with power-law kernel functions on the cascades
+group_fits <- group_fit_series(cascades, model_type = 'mPL', observation_times = Inf, cores = 15)
+# getLabeledUsers() returns a pandas dataframe with the influence and botness labels of users 
+labeledUsers <- bs$getLabeledUsers()
 ```
 
 ## User influence analysis
