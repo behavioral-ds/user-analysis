@@ -32,7 +32,7 @@ As we cannot publish `corona_2020_01_31.jsonl` due to Twitter TOC, we have store
 ```{r}
 load('corona_2020_01_31.rda')
 labeled_users <- read.csv('corona_31_botness_influence.csv', stringsAsFactors = F,
-                          colClasses=c("character",rep("numeric",2)))
+                          colClasses=c("character",rep("numeric",3)))
 ```
 We note that all user IDs have been encrypted. After obtaining the results, let's first conduct some simple measurements on users and cascades.
 ```{r, fig.dim=c(3,2)}
@@ -70,16 +70,33 @@ ggplot(data.frame(time = sapply(cascades, function(c) c$time[nrow(c)]))) +
   geom_text(data=data.frame(), aes(x = mean_value2, y = 1e-3, label= sprintf('mean: %s', round(mean_value2, 2))), color= 'red', angle=90, vjust=-0.11) +
   xlab('cascade final event time')+
   ylab('CCDF')
+
+mean_value <- mean(labeled_users$activity)
+ggplot(data.frame(size = labeled_users$activity)) +
+   stat_ecdf(aes(size, 1 - ..y..)) +
+   scale_x_log10() +
+   scale_y_log10() +
+   geom_vline(xintercept = mean_value, linetype=2, color = 'red') +
+   geom_text(data=data.frame(), aes(x = mean_value, y = 1e-3, label= sprintf('mean: %s', round(mean_value, 2))), color= 'red', angle=90, vjust=-0.11) + xlab('user activity')+ ylab('CCDF')
 ```
 
+## Retrain the bot detector
+
+If one find the botness scores are not accurate, `birdspotter` provides a relabeling tool and a retrain API to learn from the given relabeled dataset
+```{r eval=F}
+# output a file for mannual labeling
+bs$getBotAnnotationTemplate('users_to_label.csv')
+# Once annotated the botness detector can be trained with
+bs$trainClassifierModel('users_to_label.csv')
+```
 
 ## Fit user posted cacsades with `evently`
 We model a group of cascades initiated by a particular user jointly and treat the fitted model as a characterization of the user. In this example, we select two users for comparison.
 ```{r, fig.dim=c(6,2)}
-selected_users <- c('50905744', '971239069')
+selected_users <- c('369686755237813560', '174266868073402929')
 
 # fit Hawkes process on cascades initiated by the selected users
-user_posted_cascades_fitted <- lapply(selected_users, function(user) {
+user_cascades_fitted <- lapply(selected_users, function(user) {
   # select cascades that are initiated by the "selected_user"
   selected_cascades <- Filter(function(cascade) cascade$user[[1]] == user, cascades)
   # obtain the observation times;
@@ -87,23 +104,40 @@ user_posted_cascades_fitted <- lapply(selected_users, function(user) {
   # as we only observed until the end of 31st Jan
   times <- 1580515200 - sapply(selected_cascades, function(cas) cas$absolute_time[1])
   # fit a model on the selected cascades;
-  fit_series(data = selected_cascades, model_type = 'mPL', observation_time = times)
+  fit_series(data = selected_cascades, model_type = 'mPL', observation_time = times, cores = 10)
+})
+user_cascades_SEISMIC_fitted <- lapply(selected_users, function(user) {
+  selected_cascades <- Filter(function(cascade) cascade$user[[1]] == user, cascades)
+  times <- 1580515200 - sapply(selected_cascades, function(cas) cas$absolute_time[1])
+  fit_series(data = selected_cascades, model_type = 'SEISMIC',
+             observation_time = times)
 })
 # check the fitted kernel functions
-plot_kernel_function(user_posted_cascades_fitted)
+plot_kernel_function(user_cascades_fitted) +
+  scale_color_discrete(labels = c("@BobOngHugots", "@Jaefans_Global"))
 ```
 
 The plot shows the fitted kernel functions of these two users which reflect their time-decaying influence of attracting followers to reshare their posts. We then demonstrate how to simulate new cascades
 ```{r, fig.dim=c(6,2)}
-set.seed(1059)
-user_magnitude <- Filter(function(cascade) cascade$user[[1]] == '50905744', cascades)[[1]]$magnitude[1]
-# simulate a cascade with given history from user 1
-cascade <- Filter(function(cascade) cascade$user[1] == selected_users[[1]], cascades)[[1]]
-sim_cascade <- generate_series(user_posted_cascades_fitted[[1]], M = user_magnitude,
-                               init_history = cascade)
-# simulate a new cascade from user 1
-sim_cascade <- generate_series(user_posted_cascades_fitted[[1]], M = user_magnitude)
-plot_event_series(cascade = sim_cascade, model = user_posted_cascades_fitted[[1]])
+set.seed(134841)
+user_magnitude <- Filter(function(cascade) cascade$user[[1]] == selected_users[[1]], cascades)[[1]]$magnitude[1]
+# simulate a new cascade from @BobOngHugots
+sim_cascade <- generate_series(user_cascades_fitted[[1]], M = user_magnitude)
+plot_event_series(cascade = sim_cascade, model = user_cascades_fitted[[1]])
+
+selected_cascade <- Filter(function(cascade) cascade$user[1] == selected_users[[1]], cascades)[[1]]
+selected_time <- user_cascades_fitted[[1]]$observation_time[1]
+# simulate a cascade with a "selected_cascade" from @BobOngHugots
+sim_cascade <- generate_series(user_cascades_fitted[[1]], M = user_magnitude,
+                               init_history = selected_cascade)
+sprintf('%s new events simulated after cascade',
+        nrow(sim_cascade[[1]]) - nrow(selected_cascade))
+predict_final_popularity(user_cascades_fitted[[1]],
+                         selected_cascade, selected_time)
+# predict with SEISMIC model, assume we have fitted the SEISMIC model
+predict_final_popularity(user_cascades_SEISMIC_fitted[[1]],
+                         selected_cascade, selected_time)
+get_branching_factor(user_cascades_fitted[[1]])
 ```
 
 ## Visualize users in a latent space

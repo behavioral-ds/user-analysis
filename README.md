@@ -48,7 +48,7 @@ have stored the results and load them below
 ``` r
 load('corona_2020_01_31.rda')
 labeled_users <- read.csv('corona_31_botness_influence.csv', stringsAsFactors = F,
-                          colClasses=c("character",rep("numeric",2)))
+                          colClasses=c("character",rep("numeric",3)))
 ```
 
 We note that all user IDs have been encrypted. After obtaining the
@@ -112,6 +112,33 @@ ggplot(data.frame(time = sapply(cascades, function(c) c$time[nrow(c)]))) +
 
 ![](README_files/figure-gfm/unnamed-chunk-4-4.png)<!-- -->
 
+``` r
+mean_value <- mean(labeled_users$activity)
+ggplot(data.frame(size = labeled_users$activity)) +
+   stat_ecdf(aes(size, 1 - ..y..)) +
+   scale_x_log10() +
+   scale_y_log10() +
+   geom_vline(xintercept = mean_value, linetype=2, color = 'red') +
+   geom_text(data=data.frame(), aes(x = mean_value, y = 1e-3, label= sprintf('mean: %s', round(mean_value, 2))), color= 'red', angle=90, vjust=-0.11) + xlab('user activity')+ ylab('CCDF')
+```
+
+    ## Warning: Transformation introduced infinite values in continuous y-axis
+
+![](README_files/figure-gfm/unnamed-chunk-4-5.png)<!-- -->
+
+## Retrain the bot detector
+
+If one find the botness scores are not accurate, `birdspotter` provides
+a relabeling tool and a retrain API to learn from the given relabeled
+dataset
+
+``` r
+# output a file for mannual labeling
+bs$getBotAnnotationTemplate('users_to_label.csv')
+# Once annotated the botness detector can be trained with
+bs$trainClassifierModel('users_to_label.csv')
+```
+
 ## Fit user posted cacsades with `evently`
 
 We model a group of cascades initiated by a particular user jointly and
@@ -119,10 +146,10 @@ treat the fitted model as a characterization of the user. In this
 example, we select two users for comparison.
 
 ``` r
-selected_users <- c('50905744', '971239069')
+selected_users <- c('369686755237813560', '174266868073402929')
 
 # fit Hawkes process on cascades initiated by the selected users
-user_posted_cascades_fitted <- lapply(selected_users, function(user) {
+user_cascades_fitted <- lapply(selected_users, function(user) {
   # select cascades that are initiated by the "selected_user"
   selected_cascades <- Filter(function(cascade) cascade$user[[1]] == user, cascades)
   # obtain the observation times;
@@ -130,31 +157,67 @@ user_posted_cascades_fitted <- lapply(selected_users, function(user) {
   # as we only observed until the end of 31st Jan
   times <- 1580515200 - sapply(selected_cascades, function(cas) cas$absolute_time[1])
   # fit a model on the selected cascades;
-  fit_series(data = selected_cascades, model_type = 'mPL', observation_time = times)
+  fit_series(data = selected_cascades, model_type = 'mPL', observation_time = times, cores = 10)
+})
+user_cascades_SEISMIC_fitted <- lapply(selected_users, function(user) {
+  selected_cascades <- Filter(function(cascade) cascade$user[[1]] == user, cascades)
+  times <- 1580515200 - sapply(selected_cascades, function(cas) cas$absolute_time[1])
+  fit_series(data = selected_cascades, model_type = 'SEISMIC',
+             observation_time = times)
 })
 # check the fitted kernel functions
-plot_kernel_function(user_posted_cascades_fitted)
+plot_kernel_function(user_cascades_fitted) +
+  scale_color_discrete(labels = c("@BobOngHugots", "@Jaefans_Global"))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
 
 The plot shows the fitted kernel functions of these two users which
 reflect their time-decaying influence of attracting followers to reshare
 their posts. We then demonstrate how to simulate new cascades
 
 ``` r
-set.seed(1059)
-user_magnitude <- Filter(function(cascade) cascade$user[[1]] == '50905744', cascades)[[1]]$magnitude[1]
-# simulate a cascade with given history from user 1
-cascade <- Filter(function(cascade) cascade$user[1] == selected_users[[1]], cascades)[[1]]
-sim_cascade <- generate_series(user_posted_cascades_fitted[[1]], M = user_magnitude,
-                               init_history = cascade)
-# simulate a new cascade from user 1
-sim_cascade <- generate_series(user_posted_cascades_fitted[[1]], M = user_magnitude)
-plot_event_series(cascade = sim_cascade, model = user_posted_cascades_fitted[[1]])
+set.seed(134841)
+user_magnitude <- Filter(function(cascade) cascade$user[[1]] == selected_users[[1]], cascades)[[1]]$magnitude[1]
+# simulate a new cascade from @BobOngHugots
+sim_cascade <- generate_series(user_cascades_fitted[[1]], M = user_magnitude)
+plot_event_series(cascade = sim_cascade, model = user_cascades_fitted[[1]])
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+``` r
+selected_cascade <- Filter(function(cascade) cascade$user[1] == selected_users[[1]], cascades)[[1]]
+selected_time <- user_cascades_fitted[[1]]$observation_time[1]
+# simulate a cascade with a "selected_cascade" from @BobOngHugots
+sim_cascade <- generate_series(user_cascades_fitted[[1]], M = user_magnitude,
+                               init_history = selected_cascade)
+sprintf('%s new events simulated after cascade',
+        nrow(sim_cascade[[1]]) - nrow(selected_cascade))
+```
+
+    ## [1] "25 new events simulated after cascade"
+
+``` r
+predict_final_popularity(user_cascades_fitted[[1]],
+                         selected_cascade, selected_time)
+```
+
+    ## [1] 458.303
+
+``` r
+# predict with SEISMIC model, assume we have fitted the SEISMIC model
+predict_final_popularity(user_cascades_SEISMIC_fitted[[1]],
+                         selected_cascade, selected_time)
+```
+
+    ## [1] 729.923
+
+``` r
+get_branching_factor(user_cascades_fitted[[1]])
+```
+
+    ## [1] 0.7681281
 
 ## Visualize users in a latent space
 
@@ -195,25 +258,25 @@ positions <- tsne(distances, k = 2)
 
     ## sigma summary: Min. : 0.34223375605395 |1st Qu. : 0.457223801885988 |Median : 0.489891425900637 |Mean : 0.500483006369232 |3rd Qu. : 0.538593613780411 |Max. : 0.676779919259545 |
 
-    ## Epoch: Iteration #100 error is: 14.4721484330671
+    ## Epoch: Iteration #100 error is: 14.1961110881254
 
-    ## Epoch: Iteration #200 error is: 0.494206125273365
+    ## Epoch: Iteration #200 error is: 0.490122133064818
 
-    ## Epoch: Iteration #300 error is: 0.485272972126985
+    ## Epoch: Iteration #300 error is: 0.474257867010761
 
-    ## Epoch: Iteration #400 error is: 0.483810338006727
+    ## Epoch: Iteration #400 error is: 0.472067779170087
 
-    ## Epoch: Iteration #500 error is: 0.483587638668251
+    ## Epoch: Iteration #500 error is: 0.471844181155159
 
-    ## Epoch: Iteration #600 error is: 0.483535633489899
+    ## Epoch: Iteration #600 error is: 0.471798834134577
 
-    ## Epoch: Iteration #700 error is: 0.483522380890363
+    ## Epoch: Iteration #700 error is: 0.471783207059971
 
-    ## Epoch: Iteration #800 error is: 0.483518794050688
+    ## Epoch: Iteration #800 error is: 0.471632929621924
 
-    ## Epoch: Iteration #900 error is: 0.483517747470568
+    ## Epoch: Iteration #900 error is: 0.47087861882558
 
-    ## Epoch: Iteration #1000 error is: 0.483517435925573
+    ## Epoch: Iteration #1000 error is: 0.470873765976829
 
 ``` r
 df <- data.frame(x = positions[,1], y = positions[,2],
@@ -230,4 +293,4 @@ ggplot(df, aes(x, y, color = influence, shape = botornot, size = botornot)) +
         legend.title = element_text(size = 6), legend.spacing = unit(.05, 'cm'))
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
