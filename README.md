@@ -219,6 +219,12 @@ get_branching_factor(user_cascades_fitted[[1]])
 
     ## [1] 0.7681281
 
+``` r
+get_viral_score(user_cascades_fitted[[1]])
+```
+
+    ## [1] 7.407763
+
 ## Visualize users in a latent space
 
 We show a visualization of top 300 users posted most tweets using the

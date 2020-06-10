@@ -138,6 +138,7 @@ predict_final_popularity(user_cascades_fitted[[1]],
 predict_final_popularity(user_cascades_SEISMIC_fitted[[1]],
                          selected_cascade, selected_time)
 get_branching_factor(user_cascades_fitted[[1]])
+get_viral_score(user_cascades_fitted[[1]])
 ```
 
 ## Visualize users in a latent space
