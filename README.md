@@ -20,6 +20,9 @@ information diffusion. We leverage information provided by the tools to
 study the users in the COVID19 dataset.
 
 ``` r
+# install evently with the following version to maintain compatibility
+# regarding future development
+# devtools::install_github('behavioral-ds/evently@c2e28ea9d839adf48d201b6ed8b65917a8139afa')
 library(evently)
 library(reticulate)
 birdspotter <- import('birdspotter')
